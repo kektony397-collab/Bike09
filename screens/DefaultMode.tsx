@@ -11,8 +11,14 @@ interface DefaultModeProps {
 const DefaultMode: React.FC<DefaultModeProps> = ({ bike }) => {
   const { isTracking, locationData, distance, error, startTracking, stopTracking, resetDistance } = useLocation();
   const [petrolRefilled, setPetrolRefilled] = useState<number>(() => {
-    const saved = localStorage.getItem('petrolRefilled');
-    return saved ? parseFloat(saved) : 5;
+    try {
+        const saved = localStorage.getItem('petrolRefilled');
+        const parsed = saved ? parseFloat(saved) : 5;
+        return isNaN(parsed) ? 5 : parsed;
+    } catch (e) {
+        console.error("Could not read 'petrolRefilled' from localStorage", e);
+        return 5;
+    }
   });
   const [petrolLevel, setPetrolLevel] = useState<number>(petrolRefilled);
   
@@ -34,7 +40,11 @@ const DefaultMode: React.FC<DefaultModeProps> = ({ bike }) => {
 
   const handleRefill = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('petrolRefilled', petrolRefilled.toString());
+    try {
+      localStorage.setItem('petrolRefilled', petrolRefilled.toString());
+    } catch (e) {
+      console.error("Could not save 'petrolRefilled' to localStorage", e);
+    }
     setPetrolLevel(petrolRefilled);
     resetDistance();
   };
@@ -67,7 +77,7 @@ const DefaultMode: React.FC<DefaultModeProps> = ({ bike }) => {
               type="number"
               step="0.1"
               value={petrolRefilled}
-              onChange={(e) => setPetrolRefilled(parseFloat(e.target.value))}
+              onChange={(e) => setPetrolRefilled(parseFloat(e.target.value) || 0)}
               className="mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-brand-text-primary focus:outline-none focus:ring-brand-primary focus:border-brand-primary"
               min="0"
             />

@@ -6,16 +6,19 @@ import { DrivingDataPoint } from '../types';
 // Do not hardcode API keys in the application.
 const API_KEY = process.env.API_KEY;
 
-if (!API_KEY) {
-  // In a real app, you'd want to handle this more gracefully,
-  // maybe disable the AI feature and show a message to the user.
-  console.error("Gemini API key not found. Please set the API_KEY environment variable.");
+let ai: GoogleGenAI | null = null;
+
+// Lazily initialize the AI instance to prevent app crash on start if API_KEY is missing.
+const getAiInstance = (): GoogleGenAI | null => {
+  if (!ai && API_KEY) {
+    ai = new GoogleGenAI({ apiKey: API_KEY });
+  }
+  return ai;
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
-
 export const analyzeDrivingData = async (data: DrivingDataPoint[]): Promise<string> => {
-  if (!API_KEY) {
+  const aiInstance = getAiInstance();
+  if (!aiInstance) {
     return "AI feature is currently unavailable. API Key is not configured.";
   }
   
@@ -40,7 +43,7 @@ export const analyzeDrivingData = async (data: DrivingDataPoint[]): Promise<stri
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await aiInstance.models.generateContent({
       model: model,
       contents: prompt,
       config: {

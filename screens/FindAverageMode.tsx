@@ -7,12 +7,24 @@ const FindAverageMode: React.FC = () => {
   const [petrolRefilled, setPetrolRefilled] = useState<number>(1);
   const [results, setResults] = useState<{ average: number; distance: number; petrol: number } | null>(null);
   const [history, setHistory] = useState<{ average: number; distance: number; petrol: number }[]>(() => {
-    const saved = localStorage.getItem('averageHistory');
-    return saved ? JSON.parse(saved) : [];
+    try {
+        const saved = localStorage.getItem('averageHistory');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            return Array.isArray(parsed) ? parsed : [];
+        }
+    } catch (e) {
+        console.error("Failed to parse history from localStorage", e);
+    }
+    return [];
   });
   
   useEffect(() => {
-      localStorage.setItem('averageHistory', JSON.stringify(history));
+      try {
+        localStorage.setItem('averageHistory', JSON.stringify(history));
+      } catch(e) {
+        console.error("Failed to save history to localStorage", e);
+      }
   }, [history]);
 
   const handleReserveReached = () => {
@@ -56,7 +68,7 @@ const FindAverageMode: React.FC = () => {
             type="number"
             step="0.1"
             value={petrolRefilled}
-            onChange={(e) => setPetrolRefilled(parseFloat(e.target.value))}
+            onChange={(e) => setPetrolRefilled(parseFloat(e.target.value) || 0)}
             className="mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-brand-text-primary focus:outline-none focus:ring-brand-primary focus:border-brand-primary"
             min="1.1"
             disabled={isTracking}

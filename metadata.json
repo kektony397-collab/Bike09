@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Bike Advance",
+  "description": "A sophisticated bike mileage and performance tracking application. It features real-time GPS speed and distance tracking, a futuristic speedometer, custom mileage calculation, a bike database, and an AI mode powered by Google Gemini for providing fuel efficiency suggestions.",
+  "requestFramePermissions": []
+}

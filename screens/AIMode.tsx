@@ -1,18 +1,38 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocation } from '../hooks/useLocation';
+import { useLocation, useWakeLock } from '../hooks/useLocation';
 import { useSpeech } from '../hooks/useSpeech';
 import { analyzeDrivingData } from '../services/geminiService';
-import { DrivingDataPoint } from '../types';
+import { DrivingDataPoint, Bike } from '../types';
 
-const AIMode: React.FC = () => {
+interface AIModeProps {
+  bike: Bike;
+}
+
+const AIMode: React.FC<AIModeProps> = ({ bike }) => {
   const { isTracking, locationData, distance, error, startTracking, stopTracking } = useLocation();
   const { speak, isSpeaking } = useSpeech();
+  useWakeLock(isTracking); // Keep screen on while tracking
+
   const [drivingData, setDrivingData] = useState<DrivingDataPoint[]>([]);
   const [aiSuggestion, setAiSuggestion] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isVoiceAssistantOn, setIsVoiceAssistantOn] = useState(true);
 
   const lastSpokenDistanceRef = useRef(0);
+  const analysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const overSpeedingAlertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get initial petrol amount from localStorage, similar to DefaultMode
+  const [petrolRefilled] = useState<number>(() => {
+    try {
+        const saved = localStorage.getItem('petrolRefilled');
+        return saved ? parseFloat(saved) : 5;
+    } catch {
+        return 5;
+    }
+  });
+
+  const remainingRange = Math.max(0, (petrolRefilled * bike.mileage) - distance);
 
   // Collect driving data when tracking
   useEffect(() => {
@@ -27,16 +47,78 @@ const AIMode: React.FC = () => {
     };
   }, [isTracking, locationData.speed]);
 
-  // Voice alerts for distance covered
+  const handleAnalyze = useCallback(async () => {
+    if (drivingData.length < 10 || isLoading || isSpeaking) {
+      return;
+    }
+    setIsLoading(true);
+    const suggestion = await analyzeDrivingData(drivingData);
+    if (suggestion.toLowerCase().includes("keep up")) {
+        // Don't show positive reinforcement all the time
+    } else {
+        setAiSuggestion(suggestion);
+        if (isVoiceAssistantOn) {
+            speak(suggestion);
+        }
+    }
+    setIsLoading(false);
+  }, [drivingData, isLoading, isSpeaking, speak, isVoiceAssistantOn]);
+
+  // Voice alerts and periodic analysis
   useEffect(() => {
-    if (isTracking && !isSpeaking) {
+    if (isTracking && isVoiceAssistantOn && !isSpeaking) {
+      // Distance alert
       const distanceCovered = Math.floor(distance);
-      if (distanceCovered > 0 && distanceCovered > lastSpokenDistanceRef.current && distanceCovered % 5 === 0) { // Alert every 5 km
-        speak(`You have covered ${distanceCovered} kilometers.`);
+      if (distanceCovered > 0 && distanceCovered > lastSpokenDistanceRef.current && distanceCovered % 10 === 0) { // Alert every 10 km
+        speak(`You have covered ${distanceCovered} kilometers. Estimated remaining range is ${remainingRange.toFixed(0)} kilometers.`);
         lastSpokenDistanceRef.current = distanceCovered;
       }
+
+      // Rule-based over-speeding alert
+      const optimalMax = 55; // Should be dynamic based on bike? For now, hardcoded.
+      if (locationData.speed > optimalMax + 5) {
+          if (!overSpeedingAlertTimeoutRef.current) {
+            overSpeedingAlertTimeoutRef.current = setTimeout(() => {
+              if(!isSpeaking) speak("Slow down to improve fuel efficiency.");
+            }, 5000); // Trigger alert if speeding for 5 seconds
+          }
+      } else {
+          if (overSpeedingAlertTimeoutRef.current) {
+              clearTimeout(overSpeedingAlertTimeoutRef.current);
+              overSpeedingAlertTimeoutRef.current = null;
+          }
+      }
+    } else {
+        // Clear timeout if tracking stops or voice is off
+        if (overSpeedingAlertTimeoutRef.current) {
+            clearTimeout(overSpeedingAlertTimeoutRef.current);
+            overSpeedingAlertTimeoutRef.current = null;
+        }
     }
-  }, [distance, isTracking, isSpeaking, speak]);
+
+    // Periodic Gemini analysis
+    if (isTracking && isVoiceAssistantOn) {
+      if (!analysisIntervalRef.current) {
+        analysisIntervalRef.current = setInterval(handleAnalyze, 120000); // Analyze every 2 minutes
+      }
+    } else {
+      if (analysisIntervalRef.current) {
+        clearInterval(analysisIntervalRef.current);
+        analysisIntervalRef.current = null;
+      }
+    }
+    
+    // Cleanup on unmount
+    return () => {
+        if (analysisIntervalRef.current) {
+            clearInterval(analysisIntervalRef.current);
+        }
+        if (overSpeedingAlertTimeoutRef.current) {
+            clearTimeout(overSpeedingAlertTimeoutRef.current);
+        }
+    }
+
+  }, [distance, isTracking, isSpeaking, speak, locationData.speed, handleAnalyze, remainingRange, isVoiceAssistantOn]);
 
   const handleStartTracking = () => {
     setDrivingData([]);
@@ -45,7 +127,7 @@ const AIMode: React.FC = () => {
     startTracking();
   }
 
-  const handleAnalyze = async () => {
+  const manualAnalyze = async () => {
     if (drivingData.length < 5) {
       setAiSuggestion("Please start tracking and drive for a short while before analyzing.");
       return;
@@ -54,15 +136,33 @@ const AIMode: React.FC = () => {
     setAiSuggestion('');
     const suggestion = await analyzeDrivingData(drivingData);
     setAiSuggestion(suggestion);
-    speak(suggestion);
+    if (isVoiceAssistantOn) speak(suggestion);
     setIsLoading(false);
-  };
+  }
 
   return (
     <div className="p-4 space-y-6">
       <div className="text-center">
         <h1 className="text-2xl font-bold">Honda AI Assistant</h1>
-        <p className="text-brand-text-secondary">Get real-time feedback to improve your mileage.</p>
+        <p className="text-brand-text-secondary">Your real-time driving coach.</p>
+      </div>
+
+      <div className="w-full max-w-sm mx-auto flex justify-center items-center gap-4 p-2 bg-brand-surface rounded-full">
+        <label htmlFor="voice-toggle" className="text-sm font-medium text-brand-text-secondary">
+          Voice Assistant
+        </label>
+        <button
+          id="voice-toggle"
+          role="switch"
+          aria-checked={isVoiceAssistantOn}
+          onClick={() => setIsVoiceAssistantOn(!isVoiceAssistantOn)}
+          className={`relative inline-flex items-center h-6 rounded-full w-11 cursor-pointer transition-colors ${isVoiceAssistantOn ? 'bg-brand-secondary' : 'bg-gray-600'}`}
+        >
+          <span className="sr-only">Enable Voice Assistant</span>
+          <span
+            className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${isVoiceAssistantOn ? 'translate-x-6' : 'translate-x-1'}`}
+          />
+        </button>
       </div>
       
       <div className="w-full max-w-sm mx-auto text-center font-orbitron p-6 bg-brand-surface rounded-xl">
@@ -83,7 +183,7 @@ const AIMode: React.FC = () => {
           {isTracking ? 'Stop Session' : 'Start Driving Session'}
         </button>
         <button
-          onClick={handleAnalyze}
+          onClick={manualAnalyze}
           disabled={isLoading || !isTracking}
           className="py-3 text-lg font-bold rounded-lg transition bg-brand-secondary text-brand-bg disabled:bg-gray-600 disabled:cursor-not-allowed"
         >

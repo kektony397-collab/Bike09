@@ -1,6 +1,53 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { LocationData } from '../types';
+
+export const useWakeLock = (isLocked: boolean) => {
+  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null);
+
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+      try {
+        const lock = await navigator.wakeLock.request('screen');
+        setWakeLock(lock);
+        lock.addEventListener('release', () => {
+          setWakeLock(null);
+        });
+      } catch (err) {
+        console.error(`${(err as Error).name}, ${(err as Error).message}`);
+      }
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLock) {
+      await wakeLock.release();
+      setWakeLock(null);
+    }
+  }, [wakeLock]);
+
+  useEffect(() => {
+    if (isLocked) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    const handleVisibilityChange = () => {
+      if (isLocked && document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleVisibilityChange);
+
+    return () => {
+      releaseWakeLock();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleVisibilityChange);
+    };
+  }, [isLocked, requestWakeLock, releaseWakeLock]);
+};
 
 // Haversine formula to calculate distance between two lat/lon points
 const haversineDistance = (coords1: GeolocationCoordinates, coords2: GeolocationCoordinates): number => {

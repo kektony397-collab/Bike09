@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { DrivingDataPoint } from '../types';
 
@@ -28,17 +27,18 @@ export const analyzeDrivingData = async (data: DrivingDataPoint[]): Promise<stri
 
   const model = 'gemini-2.5-flash';
   
-  // Convert the data points to a more readable format for the prompt.
-  const dataString = data.map(p => `Speed: ${p.speed.toFixed(1)} km/h`).join(', ');
+  // Take the last 20 data points for recent analysis
+  const recentData = data.slice(-20);
+  const dataString = recentData.map(p => `Speed: ${p.speed.toFixed(1)} km/h`).join(', ');
 
   const prompt = `
-    You are an expert motorcycle mechanic and fuel efficiency coach.
-    Analyze the following driving data which consists of speed readings (in km/h) taken every few seconds.
-    Based on this data, provide concise, actionable suggestions to improve the rider's fuel mileage.
-    Focus on patterns like rapid acceleration, hard braking (inferred from rapid deceleration), and inconsistent speeds.
-    Keep your response under 100 words.
+    You are an expert motorcycle driving coach AI.
+    Analyze the following recent driving data which consists of speed readings (in km/h).
+    Based on the most recent patterns, provide one single, concise, actionable voice command (under 15 words) to help the rider improve fuel mileage *right now*.
+    For example: "Avoid sudden acceleration," or "Maintain a steady speed for better mileage."
+    If driving is smooth and efficient, respond with "Keep up the smooth driving."
 
-    Driving Data:
+    Recent Driving Data:
     [${dataString}]
   `;
 
@@ -47,7 +47,8 @@ export const analyzeDrivingData = async (data: DrivingDataPoint[]): Promise<stri
       model: model,
       contents: prompt,
       config: {
-        temperature: 0.5,
+        temperature: 0.4,
+        thinkingConfig: { thinkingBudget: 0 }, // For low latency
       }
     });
 

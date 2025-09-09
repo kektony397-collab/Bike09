@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bike } from '../types';
-import { useLocation } from '../hooks/useLocation';
+import { useLocation, useWakeLock } from '../hooks/useLocation';
 import Speedometer from '../components/Speedometer';
 
 interface DefaultModeProps {
@@ -10,6 +9,7 @@ interface DefaultModeProps {
 
 const DefaultMode: React.FC<DefaultModeProps> = ({ bike }) => {
   const { isTracking, locationData, distance, error, startTracking, stopTracking, resetDistance } = useLocation();
+  useWakeLock(isTracking);
   const [petrolRefilled, setPetrolRefilled] = useState<number>(() => {
     try {
         const saved = localStorage.getItem('petrolRefilled');

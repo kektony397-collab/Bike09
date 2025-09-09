@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
-import { useLocation } from '../hooks/useLocation';
+import { useLocation, useWakeLock } from '../hooks/useLocation';
 
 const FindAverageMode: React.FC = () => {
   const { isTracking, locationData, distance, error, startTracking, stopTracking, resetDistance } = useLocation();
+  useWakeLock(isTracking);
   const [petrolRefilled, setPetrolRefilled] = useState<number>(1);
   const [results, setResults] = useState<{ average: number; distance: number; petrol: number } | null>(null);
   const [history, setHistory] = useState<{ average: number; distance: number; petrol: number }[]>(() => {

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Bike, Screen } from './types';
 import { DEFAULT_BIKE } from './constants';
@@ -22,7 +21,7 @@ const App: React.FC = () => {
       case 'search':
         return <BikeSearch selectedBike={selectedBike} setSelectedBike={setSelectedBike} />;
       case 'ai':
-        return <AIMode />;
+        return <AIMode bike={selectedBike} />;
       default:
         return <DefaultMode bike={selectedBike} />;
     }
